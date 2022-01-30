@@ -12,6 +12,8 @@
 #include "Wire.h"  //Required to talk to multiple components
 #include <Adafruit_VL53L0X.h>  //0x29 serial address
 #include <SimpleKalmanFilter.h>  //Filter Library
+#include "MFWF_control.h"
+#include "MFWF_control_private.h"
 
 //Pin specifications 
 #define ESCpin 10 //ESC PWM
@@ -33,6 +35,7 @@ double sensorValue = 0;
 double duration;
 double distance;
 float z; //height
+float ze; //height
 int potval; //Use for testing with potentiometer
 float potpos; // Test potentiometer position
 float pitchval; //Current pitch
@@ -68,6 +71,7 @@ long refresh_time;
 ////////////////////SETUP//////////////////////////
 
 void setup() {
+  
   Serial.begin(115200); //Higher rate
   //Begin communication with i2c for serial data
   Wire.begin();
@@ -149,6 +153,10 @@ void setup() {
 
   //Potentiometer (Not required, automatic input)
   pinMode(0, INPUT);
+
+
+ // initialize controller
+ MFWF_control_initialize();
 }
 
 void loop() {
@@ -237,7 +245,161 @@ void loop() {
   }else{
     analogWrite(ESCpin, LOW);
   }
-  
-  Serial.println("");
-  //delay(100); //Delay for making readings/debugging easier. Not required
+
+  // Controller step
+  MFWF_control_U.C_in_control_z = 0; // control signal
+  MFWF_control_U.C_in_control_phi = 0; 
+  MFWF_control_U.C_in_sensor_phi = ypr[2];
+  MFWF_control_update();
+//  
+  MFWF_control_output();
+
+  Serial.print(" Controller: ");
+  Serial.println(MFWF_control_Y.C_out_pitch*180/M_PI+90);
+  pitch.write(MFWF_control_Y.C_out_pitch*180/M_PI+90);
+  delay(15);
 }
+
+/*
+ * Academic License - for use in teaching, academic research, and meeting
+ * course requirements at degree granting institutions only.  Not for
+ * government, commercial, or other organizational use.
+ *
+ * File: MFWF_control.c
+ *
+ * Code generated for Simulink model 'MFWF_control'.
+ *
+ * Model version                  : 8.23
+ * Simulink Coder version         : 9.5 (R2021a) 14-Nov-2020
+ * C/C++ source code generated on : Wed Jan 26 21:55:59 2022
+ *
+ * Target selection: ert.tlc
+ * Embedded hardware selection: 32-bit Generic
+ * Code generation objectives: Unspecified
+ * Validation result: Not run
+ */
+
+
+
+/* Block signals (default storage) */
+BlockIO_MFWF_control MFWF_control_B;
+
+/* Block states (default storage) */
+D_Work_MFWF_control MFWF_control_DWork;
+
+/* External inputs (root inport signals with default storage) */
+ExternalInputs_MFWF_control MFWF_control_U;
+
+/* External outputs (root outports fed by signals with default storage) */
+ExternalOutputs_MFWF_control MFWF_control_Y;
+
+/* Real-time model */
+static RT_MODEL_MFWF_control MFWF_control_M_;
+RT_MODEL_MFWF_control *const MFWF_control_M = &MFWF_control_M_;
+
+/* Model output function */
+void MFWF_control_output(void)
+{
+  real_T rtb_Sum;
+  real_T rtb_z_error;
+  real_T u0;
+
+  /* Sum: '<S1>/Sum' incorporates:
+   *  Inport: '<Root>/C_in_control_phi'
+   *  Inport: '<Root>/C_in_sensor_phi'
+   */
+  rtb_Sum = MFWF_control_U.C_in_control_phi - MFWF_control_U.C_in_sensor_phi;
+
+  /* Gain: '<S38>/Filter Coefficient' incorporates:
+   *  DiscreteIntegrator: '<S30>/Filter'
+   *  Gain: '<S29>/Derivative Gain'
+   *  Sum: '<S30>/SumD'
+   */
+  MFWF_control_B.FilterCoefficient = ((0.8 * rtb_Sum) -
+    MFWF_control_DWork.Filter_DSTATE) * 100.0;
+
+  /* Sum: '<S2>/Sum' incorporates:
+   *  Inport: '<Root>/C_in_control_z'
+   *  Inport: '<Root>/C_in_sensor_z'
+   */
+  rtb_z_error = MFWF_control_U.C_in_control_z - MFWF_control_U.C_in_sensor_z;
+
+  /* Gain: '<S81>/Integral Gain' */
+  MFWF_control_B.IntegralGain = 2.29563854998445 * rtb_z_error;
+
+  /* Gain: '<S87>/Filter Coefficient' incorporates:
+   *  DiscreteIntegrator: '<S79>/Filter'
+   *  Gain: '<S78>/Derivative Gain'
+   *  Sum: '<S79>/SumD'
+   */
+  MFWF_control_B.FilterCoefficient_b = ((0.0 * rtb_z_error) -
+    MFWF_control_DWork.Filter_DSTATE_d) * 100.0;
+
+  /* Outport: '<Root>/C_out_flapping_freq' incorporates:
+   *  DiscreteIntegrator: '<S84>/Integrator'
+   *  Gain: '<S89>/Proportional Gain'
+   *  Sum: '<S93>/Sum'
+   */
+  MFWF_control_Y.C_out_flapping_freq = ((0.00114781927499223 * rtb_z_error) +
+    MFWF_control_DWork.Integrator_DSTATE) + MFWF_control_B.FilterCoefficient_b;
+
+  /* Sum: '<S44>/Sum' incorporates:
+   *  Gain: '<S40>/Proportional Gain'
+   */
+  u0 = (0.5 * rtb_Sum) + MFWF_control_B.FilterCoefficient;
+
+  /* Saturate: '<S42>/Saturation' */
+  if (u0 > 0.52359877559829882) {
+    /* Outport: '<Root>/C_out_pitch' */
+    MFWF_control_Y.C_out_pitch = 0.52359877559829882;
+  } else if (u0 < (-0.52359877559829882)) {
+    /* Outport: '<Root>/C_out_pitch' */
+    MFWF_control_Y.C_out_pitch = (-0.52359877559829882);
+  } else {
+    /* Outport: '<Root>/C_out_pitch' */
+    MFWF_control_Y.C_out_pitch = u0;
+  }
+
+  /* End of Saturate: '<S42>/Saturation' */
+}
+
+/* Model update function */
+void MFWF_control_update(void)
+{
+  /* Update for DiscreteIntegrator: '<S30>/Filter' */
+  MFWF_control_DWork.Filter_DSTATE += 0.001 * MFWF_control_B.FilterCoefficient;
+
+  /* Update for DiscreteIntegrator: '<S79>/Filter' */
+  MFWF_control_DWork.Filter_DSTATE_d += 0.001 *
+    MFWF_control_B.FilterCoefficient_b;
+
+  /* Update for DiscreteIntegrator: '<S84>/Integrator' */
+  MFWF_control_DWork.Integrator_DSTATE += 0.001 * MFWF_control_B.IntegralGain;
+}
+
+/* Model initialize function */
+void MFWF_control_initialize(void)
+{
+  MFWF_control_Y.C_out_pitch = 0;
+  MFWF_control_Y.C_out_roll = 0;
+  MFWF_control_Y.C_out_yaw = 0;
+  MFWF_control_Y.C_out_flapping_freq = 0;
+  MFWF_control_U.C_in_sensor_z = 0;
+  MFWF_control_U.C_in_sensor_y = 0;
+  MFWF_control_U.C_in_sensor_y = 0;
+  MFWF_control_U.C_in_sensor_phi = 0;
+  MFWF_control_U.C_in_control_phi = 0;
+  
+}
+
+/* Model terminate function */
+void MFWF_control_terminate(void)
+{
+  /* (no terminate code required) */
+}
+
+/*
+ * File trailer for generated code.
+ *
+ * [EOF]
+ */
